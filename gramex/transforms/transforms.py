@@ -190,12 +190,14 @@ def build_transform(conf, vars=None, filename='transform', cache=False, iter=Tru
     # Else, use the expression as-is
     function_name = _full_name(tree.body[0].value)
     module_name = function_name.split('.')[0] if isinstance(function_name, str) else None
+    doc = expr
     # If the module or function is one of the vars themselves, return it as-is
     # _val.type will be used as-is, then, rather than looking for an "_val" module
     if module_name in vars:
         expr = function_name
     elif function_name is not None:
         function = locate(function_name, modules=['gramex.transforms'])
+        doc = function.__doc__
         if function is None:
             app_log.error('%s: Cannot load function %s' % (filename, function_name))
         # This section converts the function into an expression.
@@ -216,6 +218,10 @@ def build_transform(conf, vars=None, filename='transform', cache=False, iter=Tru
             for key, val in conf.get('kwargs', {}).items():
                 expr += '%s=%s, ' % (key, _arg_repr(val))
             expr += ')'
+    # If expr starts with a function call (e.g. module.func(...)), use it's docs
+    elif isinstance(tree.body[0].value, ast.Call):
+        from astor import to_source
+        doc = locate(to_source(tree.body[0].value.func).strip()).__doc__
 
     # Create the code
     modules = module_names(tree, vars)
@@ -248,7 +254,7 @@ def build_transform(conf, vars=None, filename='transform', cache=False, iter=Tru
     # Return the transformed function
     function = context['transform']
     function.__name__ = str(function_name or filename)
-    function.__doc__ = str(function.__doc__)
+    function.__doc__ = str(doc)
 
     return function
 
